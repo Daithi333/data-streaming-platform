@@ -1,0 +1,75 @@
+version: "3.9"
+
+services:
+  kafka:
+    image: redpandadata/redpanda:v24.2.8
+    container_name: dsp-kafka
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --reserve-memory
+      - "0M"
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - "PLAINTEXT://0.0.0.0:9092"
+      - --advertise-kafka-addr
+      - "PLAINTEXT://kafka:9092"
+    ports:
+      - "9092:9092"   # Kafka API
+      - "9644:9644"   # Admin/metrics
+      - "8082:8082"   # HTTP proxy (optional)
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health --api-urls=http://localhost:9644 | grep -q Healthy"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  spark:
+    build:
+      context: .
+      dockerfile: docker/spark/Dockerfile
+    container_name: dsp-spark
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      DSP_KAFKA_BROKERS: "kafka:9092"
+      DSP_DATA_DIR: "/opt/dsp/data"
+      DSP_CHECKPOINT_DIR: "/opt/dsp/checkpoints"
+      PYSPARK_PYTHON: "python3"
+      PYTHONPATH: "/opt/dsp/src"
+
+    volumes:
+      - ./:/opt/dsp
+      - dsp_data:/opt/dsp/data
+      - dsp_checkpoints:/opt/dsp/checkpoints
+    working_dir: /opt/dsp
+    ports:
+      - "4040:4040"  # Spark UI (first active app)
+    # Keep container alive so you can exec spark-submit
+    command: ["bash", "-lc", "sleep infinity"]
+
+  producer:
+    image: python:3.11-slim
+    container_name: dsp-producer
+    profiles: ["tools"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    working_dir: /opt/dsp
+    volumes:
+      - ./:/opt/dsp
+    environment:
+      DSP_KAFKA_BROKERS: "kafka:9092"
+    # No long-running command; we'll run it with `docker compose run --rm producer ...`
+
+volumes:
+  dsp_data:
+  dsp_checkpoints:
