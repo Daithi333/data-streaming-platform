@@ -15,10 +15,28 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pre-commit>=4.5.1",
+    "mypy>=1.13.0",
+    "pre-commit>=4.0.1",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "pytest-xdist>=3.8.0",
     "ruff>=0.15.2",
-    "ty>=0.0.18",
 ]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+explicit_package_bases = true
+namespace_packages = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "pyspark.*",
+    "delta.*",
+    "confluent_kafka.*",
+]
+ignore_missing_imports = true

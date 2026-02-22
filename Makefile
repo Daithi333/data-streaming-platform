@@ -111,7 +111,7 @@ format-check:
 	uv run ruff format --check .
 
 typecheck:
-	uv run ty check
+	uv run mypy src
 
 pre-commit-install:
 	uv run pre-commit install

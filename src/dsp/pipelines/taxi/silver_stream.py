@@ -39,7 +39,7 @@ def main() -> None:
     bronze = spark.readStream.format("delta").load(BRONZE_PATH)
 
     validated = (
-        bronze.filter(F.col("parse_ok") is True)
+        bronze.filter(F.col("parse_ok") == F.lit(True))
         .filter(F.col("event_ts_parsed").isNotNull())
         .filter(
             (F.col("pickup_ts_parsed").isNull())

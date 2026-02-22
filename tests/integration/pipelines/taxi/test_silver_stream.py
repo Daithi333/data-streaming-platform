@@ -36,7 +36,7 @@ def test_silver_filters_parse_ok_false(spark, tmp_path):
     )
 
     bronze = spark.read.format("delta").load(bronze_path)
-    filtered = bronze.filter(F.col("parse_ok") is True)
+    filtered = bronze.filter(F.col("parse_ok") == F.lit(True))
 
     result = filtered.select("trip_id").collect()
     trip_ids = [r["trip_id"] for r in result]
@@ -69,7 +69,7 @@ def test_silver_filters_null_event_ts(spark, tmp_path):
     )
 
     bronze = spark.read.format("delta").load(bronze_path)
-    filtered = bronze.filter(F.col("parse_ok") is True).filter(
+    filtered = bronze.filter(F.col("parse_ok") == F.lit(True)).filter(
         F.col("event_ts_parsed").isNotNull()
     )
 
@@ -119,7 +119,7 @@ def test_silver_validates_timestamp_order(spark, tmp_path):
 
     bronze = spark.read.format("delta").load(bronze_path)
     filtered = (
-        bronze.filter(F.col("parse_ok") is True)
+        bronze.filter(F.col("parse_ok") == F.lit(True))
         .filter(F.col("event_ts_parsed").isNotNull())
         .filter(
             (F.col("pickup_ts_parsed").isNull())
@@ -163,7 +163,7 @@ def test_silver_validates_amounts_non_negative(spark, tmp_path):
 
     bronze = spark.read.format("delta").load(bronze_path)
     filtered = (
-        bronze.filter(F.col("parse_ok") is True)
+        bronze.filter(F.col("parse_ok") == F.lit(True))
         .filter(F.col("event_ts_parsed").isNotNull())
         .filter((F.col("fare_amount").isNull()) | (F.col("fare_amount") >= 0))
         .filter((F.col("tip_amount").isNull()) | (F.col("tip_amount") >= 0))
@@ -203,7 +203,7 @@ def test_silver_validates_trip_distance_and_passenger_count(spark, tmp_path):
 
     bronze = spark.read.format("delta").load(bronze_path)
     filtered = (
-        bronze.filter(F.col("parse_ok") is True)
+        bronze.filter(F.col("parse_ok") == F.lit(True))
         .filter(F.col("event_ts_parsed").isNotNull())
         .filter((F.col("trip_distance").isNull()) | (F.col("trip_distance") >= 0))
         .filter((F.col("passenger_count").isNull()) | (F.col("passenger_count") > 0))
@@ -240,7 +240,7 @@ def test_silver_deduplication_by_trip_id(spark, tmp_path):
 
     bronze = spark.read.format("delta").load(bronze_path)
     deduplicated = (
-        bronze.filter(F.col("parse_ok") is True)
+        bronze.filter(F.col("parse_ok") == F.lit(True))
         .filter(F.col("event_ts_parsed").isNotNull())
         .dropDuplicates(["trip_id"])
     )

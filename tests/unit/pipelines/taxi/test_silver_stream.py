@@ -37,6 +37,10 @@ class FakeF:
         return FakeExpr(f"col({name})")
 
     @staticmethod
+    def lit(value):
+        return FakeExpr(f"lit({value})")
+
+    @staticmethod
     def current_timestamp():
         return FakeExpr("current_timestamp()")
 
