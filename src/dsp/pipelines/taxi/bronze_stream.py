@@ -1,5 +1,4 @@
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
+from pyspark.sql import SparkSession, functions as F
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -7,8 +6,18 @@ from pyspark.sql.types import (
     IntegerType,
     DoubleType,
 )
+from structlog import get_logger
 
+from dsp.config.logs import configure_logging
 from dsp.config.settings import get_settings
+from dsp.streaming.runner import (
+    assert_delta_available,
+    DeltaSink,
+    StreamRunConfig,
+    start_delta_stream,
+    run_and_monitor,
+)
+
 
 s = get_settings()
 
@@ -19,8 +28,6 @@ BRONZE_PATH = s.bronze_path("taxi_trips")
 BRONZE_CHECKPOINT = s.bronze_checkpoint("taxi_trips")
 TRIGGER = s.trigger_interval
 
-
-# Schema for the JSON we produced
 EVENT_SCHEMA = StructType(
     [
         StructField("event_id", StringType(), False),
@@ -42,11 +49,23 @@ EVENT_SCHEMA = StructType(
 
 
 def main() -> None:
-    spark = SparkSession.builder.appName("dsp_taxi_bronze_stream").getOrCreate()
+    configure_logging(s.app_log_level)
+    log = get_logger().bind(app="bronze")
 
+    spark = SparkSession.builder.appName("dsp_taxi_bronze_stream").getOrCreate()
     spark.sparkContext.setLogLevel(s.spark_log_level)
 
-    # Read Kafka
+    assert_delta_available(spark)
+
+    log.info(
+        "bronze_starting",
+        topic=TOPIC,
+        brokers=BROKERS,
+        bronze_path=BRONZE_PATH,
+        checkpoint_path=BRONZE_CHECKPOINT,
+        log_progress_seconds=s.log_query_progress_seconds,
+    )
+
     raw = (
         spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", BROKERS)
@@ -55,21 +74,6 @@ def main() -> None:
         .load()
     )
 
-    (
-        raw.selectExpr(
-            "CAST(key AS STRING)",
-            "CAST(value AS STRING)",
-            "topic",
-            "partition",
-            "offset",
-        )
-        .writeStream.format("console")
-        .outputMode("append")
-        .start()
-        .awaitTermination()
-    )
-
-    # Parse payload
     parsed = (
         raw.select(
             F.col("topic").alias("kafka_topic"),
@@ -80,15 +84,16 @@ def main() -> None:
             F.col("value").cast("string").alias("raw_json"),
         )
         .withColumn("payload", F.from_json(F.col("raw_json"), EVENT_SCHEMA))
-        .select(
-            "*",
-            F.col("payload.*"),
+        .withColumn(
+            "parse_ok",
+            F.col("payload").isNotNull()
+            & F.col("payload.event_id").isNotNull()
+            & F.col("payload.event_ts").isNotNull(),
         )
+        .select("*", F.col("payload.*"))
         .drop("payload")
     )
 
-    # Add ingest metadata + deterministic trip_id for downstream dedupe/upserts
-    # trip_id here is stable for identical business fields (useful for idempotency)
     enriched = (
         parsed.withColumn("ingest_ts", F.current_timestamp())
         .withColumn(
@@ -106,24 +111,24 @@ def main() -> None:
                 256,
             ),
         )
-        .withColumn("event_ts_parsed", F.to_timestamp("event_ts"))
-        .withColumn("pickup_ts_parsed", F.to_timestamp("pickup_ts"))
-        .withColumn("dropoff_ts_parsed", F.to_timestamp("dropoff_ts"))
+        .withColumn("event_ts_parsed", F.try_to_timestamp("event_ts"))
+        .withColumn("pickup_ts_parsed", F.try_to_timestamp("pickup_ts"))
+        .withColumn("dropoff_ts_parsed", F.try_to_timestamp("dropoff_ts"))
     )
 
-    # Write to Delta (Bronze is typically append-only)
-    query = (
-        enriched.writeStream.format("delta")
-        .outputMode("append")
-        .option("checkpointLocation", BRONZE_CHECKPOINT)
-        .option("path", BRONZE_PATH)
-        .trigger(processingTime=s.trigger_interval)
-        .start()
+    sink = DeltaSink(path=BRONZE_PATH, checkpoint=BRONZE_CHECKPOINT)
+
+    cfg = StreamRunConfig(
+        app_name="dsp_taxi_bronze_stream",
+        query_name="bronze_taxi_trips_to_delta",
+        trigger_processing_time=s.trigger_interval,
+        log_progress_seconds=s.log_query_progress_seconds,
+        spark_log_level=s.spark_log_level,
+        fail_fast_delta_probe=True,
     )
 
-    print(f"[dsp] Streaming bronze -> {BRONZE_PATH}")
-    print(f"[dsp] Checkpoint -> {BRONZE_CHECKPOINT}")
-    query.awaitTermination()
+    query = start_delta_stream(enriched, sink, cfg)
+    run_and_monitor(query, cfg, extra_log_fields={"topic": TOPIC})
 
 
 if __name__ == "__main__":

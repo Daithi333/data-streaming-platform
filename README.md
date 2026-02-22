@@ -35,7 +35,7 @@ Conceptually equivalent to:
 ## Technology Stack
 
 - Python 3.11+
-- PySpark 3.5
+- PySpark 4.0
 - Delta Lake
 - Kafka-compatible broker (Redpanda)
 - Docker Compose
@@ -51,6 +51,12 @@ Conceptually equivalent to:
 
 ```bash
 uv sync
+```
+
+### Set up pre-commit hooks (optional)
+
+```bash
+make pre-commit-install
 ```
 
 ### Start infrastructure
@@ -103,16 +109,17 @@ checkpoints/bronze/taxi_trips/
 
 ## Make Targets
 
+Run `make help` for full list. Common commands:
+
 | Command | Description |
 |----------|------------|
 | `make up` | Start Kafka and Spark |
 | `make down` | Stop stack and remove volumes |
-| `make build` | Rebuild Spark image |
-| `make ps` | Show running containers |
-| `make logs` | Tail container logs |
 | `make topic-create` | Create Kafka topic |
 | `make produce` | Produce synthetic events |
 | `make bronze` | Run Bronze streaming job |
+| `make test` | Run unit and integration tests |
+| `make integration` | Run integration tests in Docker |
 
 
 ---

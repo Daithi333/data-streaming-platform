@@ -35,6 +35,7 @@ services:
     build:
       context: .
       dockerfile: docker/spark/Dockerfile
+      target: spark
     container_name: dsp-spark
     depends_on:
       kafka:
@@ -45,6 +46,7 @@ services:
       DSP_CHECKPOINT_DIR: "/opt/dsp/checkpoints"
       PYSPARK_PYTHON: "python3"
       PYTHONPATH: "/opt/dsp/src"
+      DSP_LOG_QUERY_PROGRESS_SECONDS: 10
 
     volumes:
       - ./:/opt/dsp
@@ -69,6 +71,23 @@ services:
     environment:
       DSP_KAFKA_BROKERS: "kafka:9092"
     # No long-running command; we'll run it with `docker compose run --rm producer ...`
+
+  spark-tests:
+    build:
+      context: .
+      dockerfile: docker/spark/Dockerfile
+      target: spark-test
+    container_name: dsp-spark-tests
+    working_dir: /opt/dsp
+    environment:
+      PYTHONPATH: "/opt/dsp/src"
+      PYSPARK_PYTHON: "python3"
+    volumes:
+      - ./:/opt/dsp
+      - dsp_data:/opt/dsp/data
+      - dsp_checkpoints:/opt/dsp/checkpoints
+    ports: []
+    command: ["bash", "-lc", "uv run -m pytest -v tests/integration -m spark"]
 
 volumes:
   dsp_data:

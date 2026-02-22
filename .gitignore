@@ -11,3 +11,9 @@ wheels/
 
 # IDE
 .idea/
+.vscode/
+.kiro/
+
+# pyspark
+derby.log
+metastore_db/
