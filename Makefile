@@ -1,11 +1,5 @@
 SHELL := /bin/bash
 
-# --- Versions / packages for spark-submit ---
-DELTA_VERSION ?= 3.2.0
-SPARK_VERSION ?= 3.5.1
-
-SPARK_PACKAGES := io.delta:delta-spark_2.12:$(DELTA_VERSION),org.apache.spark:spark-sql-kafka-0-10_2.12:$(SPARK_VERSION)
-
 # --- Kafka / topics ---
 KAFKA_BROKERS ?= kafka:9092
 KAFKA_TOPIC ?= taxi_trips
@@ -13,6 +7,10 @@ KAFKA_TOPIC ?= taxi_trips
 # --- Local paths (mounted into spark container via volumes) ---
 DSP_DATA_DIR ?= /opt/dsp/data
 DSP_CHECKPOINT_DIR ?= /opt/dsp/checkpoints
+
+# --- Generated requirements for Docker ---
+SPARK_REQS := docker/spark/requirements.txt
+SPARK_REQS_DEV := docker/spark/requirements-dev.txt
 
 .PHONY: help up down build ps logs topic-create produce bronze
 
@@ -49,15 +47,20 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  make spark-shell      - open bash shell in Spark container"
+	@echo "  make spark-sql        - open Spark SQL REPL"
 
 up:
 	docker compose up -d --build
 
 down:
-	docker compose down -v
+	docker compose down
 
 build:
 	docker compose build --no-cache
+
+requirements:
+	uv export --frozen --no-dev --no-hashes -o $(SPARK_REQS)
+	uv export --frozen --no-hashes -o $(SPARK_REQS_DEV)
 
 ps:
 	docker compose ps
@@ -78,13 +81,11 @@ produce:
 bronze:
 	docker compose exec spark spark-submit \
 		--master local[*] \
-		--packages "$(SPARK_PACKAGES)" \
 		/opt/dsp/src/dsp/pipelines/taxi/bronze_stream.py
 
 silver:
 	docker compose exec spark spark-submit \
 		--master local[*] \
-		--packages "$(SPARK_PACKAGES)" \
 		/opt/dsp/src/dsp/pipelines/taxi/silver_stream.py
 
 unit:
@@ -121,3 +122,6 @@ pre-commit-run:
 
 spark-shell:
 	docker compose exec spark bash
+
+spark-sql:
+	docker compose exec spark spark-sql

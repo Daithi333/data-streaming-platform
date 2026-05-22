@@ -107,6 +107,73 @@ checkpoints/bronze/taxi_trips/
 
 ---
 
+## Verifying Delta Lake Data
+
+Once the Bronze (and optionally Silver) pipelines have processed events, you can query the Delta tables using Spark SQL.
+
+### Open a Spark SQL shell
+
+```bash
+docker compose exec spark spark-sql
+```
+
+This picks up the Delta and Kafka config from `spark-defaults.conf` automatically.
+
+### Query Bronze table
+
+```sql
+SELECT COUNT(*) FROM delta.`/opt/dsp/data/bronze/taxi_trips`;
+
+SELECT * FROM delta.`/opt/dsp/data/bronze/taxi_trips`
+ORDER BY ingest_ts DESC LIMIT 10;
+
+-- Partition distribution
+SELECT kafka_partition, COUNT(*) AS cnt
+FROM delta.`/opt/dsp/data/bronze/taxi_trips`
+GROUP BY kafka_partition ORDER BY kafka_partition;
+
+-- Parse success rate
+SELECT parse_ok, COUNT(*) AS cnt
+FROM delta.`/opt/dsp/data/bronze/taxi_trips`
+GROUP BY parse_ok;
+```
+
+### Query Silver table
+
+```sql
+SELECT COUNT(*) FROM delta.`/opt/dsp/data/silver/taxi_trips`;
+
+SELECT * FROM delta.`/opt/dsp/data/silver/taxi_trips`
+ORDER BY silver_ingest_ts DESC LIMIT 10;
+
+-- Check deduplication (trip_id should be unique)
+SELECT COUNT(*) FROM (
+  SELECT trip_id FROM delta.`/opt/dsp/data/silver/taxi_trips`
+  GROUP BY trip_id HAVING COUNT(*) > 1
+);
+```
+
+### Delta Lake metadata
+
+```sql
+DESCRIBE HISTORY delta.`/opt/dsp/data/bronze/taxi_trips`;
+
+DESCRIBE DETAIL delta.`/opt/dsp/data/bronze/taxi_trips`;
+```
+
+### Quick validation checklist
+
+| Check | Expected |
+|-------|----------|
+| Bronze row count > 0 | Events are landing |
+| `parse_ok` mostly `true` | JSON schema matches producer output |
+| Silver count <= Bronze count | Validation and dedup are filtering |
+| History shows multiple versions | Micro-batches are committing |
+| No duplicate `trip_id` in Silver | Deduplication is working |
+
+
+---
+
 ## Make Targets
 
 Run `make help` for full list. Common commands:

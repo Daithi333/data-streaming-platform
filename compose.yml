@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   kafka:
     image: redpandadata/redpanda:v24.2.8
@@ -18,11 +16,12 @@ services:
       - "0"
       - --check=false
       - --kafka-addr
-      - "PLAINTEXT://0.0.0.0:9092"
+      - "INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094"
       - --advertise-kafka-addr
-      - "PLAINTEXT://kafka:9092"
+      - "INTERNAL://kafka:9092,EXTERNAL://localhost:9094"
     ports:
       - "9092:9092"   # Kafka API
+      - "9094:9094"   # Kafka API
       - "9644:9644"   # Admin/metrics
       - "8082:8082"   # HTTP proxy (optional)
     healthcheck:
