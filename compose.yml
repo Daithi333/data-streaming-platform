@@ -29,6 +29,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    volumes:
+      - kafka_data:/var/lib/redpanda/data
 
   spark:
     build:
@@ -91,3 +93,4 @@ services:
 volumes:
   dsp_data:
   dsp_checkpoints:
+  kafka_data:
